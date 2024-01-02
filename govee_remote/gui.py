@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
 from itertools import batched
 
@@ -17,14 +18,27 @@ class State:
     on: bool = True
 
 
+class ButtonMap:
+    def __init__(self) -> None:
+        self._map: dict[str, pygame.Rect] = {}
+
+    def register(self, key: str, rect: pygame.Rect) -> None:
+        self._map[key] = rect
+
+    def collisions(self, pos: tuple[int, int]) -> Iterator[str]:
+        for key, rect in self._map.items():
+            if rect.collidepoint(pos):
+                yield key
+
+
 def get_luma(rgb: tuple[int, int, int]) -> float:
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def redraw(
-    screen: pygame.Surface, state: State
-) -> tuple[dict[str, pygame.Rect], dict[int, pygame.Rect], pygame.Rect, pygame.Rect]:
+def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
+    button_map = ButtonMap()
+
     screen.fill("white")
 
     names = sorted(CSS4_COLORS, key=lambda c: tuple(rgb_to_hsv(to_rgb(c))))
@@ -34,6 +48,7 @@ def redraw(
 
     on_color = "yellow" if state.on else "lightgray"
     on_rect = pygame.Rect(20, 30, 90, 45)
+    button_map.register("power.on", on_rect)
     pygame.draw.rect(screen, get_color(on_color), on_rect)
     pygame.draw.rect(screen, get_color("black"), on_rect, width=2)
     on_text = font_large.render("On", True, "black")
@@ -41,12 +56,11 @@ def redraw(
 
     off_color = "lightgray" if state.on else "yellow"
     off_rect = pygame.Rect(150, 30, 90, 45)
+    button_map.register("power.off", off_rect)
     pygame.draw.rect(screen, get_color(off_color), off_rect)
     pygame.draw.rect(screen, get_color("black"), off_rect, width=2)
     off_text = font_large.render("Off", True, "black")
     screen.blit(off_text, off_text.get_rect(center=off_rect.center))
-
-    rects = {}
 
     for col, batch in enumerate(batched(names, 20)):
         for row, name in enumerate(batch):
@@ -55,16 +69,16 @@ def redraw(
             pygame.draw.rect(screen, get_color("black"), rect, width=2)
             color_name = font.render(name.capitalize(), 1, "black")
             screen.blit(color_name, (20 + col * 190 + 70, 100 + row * 40 + 5))
-            rects[name] = pygame.Rect(20 + col * 190, 100 + row * 40, 180, 30)
+            button_map.register(
+                f"color.{name}", pygame.Rect(20 + col * 190, 100 + row * 40, 180, 30)
+            )
             if name == state.color:
-                print(get_luma(get_color(name)))
                 color = "black" if get_luma(get_color(name)) > 130 else "white"
                 checkmark = font_large.render("X", 1, color)
                 screen.blit(checkmark, checkmark.get_rect(center=rect.center))
 
     row += 1
 
-    b_rects = {}
     brightness_label = font_large.render("Brightness", 1, "black")
     screen.blit(brightness_label, (20 + col * 190, 100 + row * 40 + 5))
 
@@ -78,7 +92,10 @@ def redraw(
         pygame.draw.rect(screen, get_color("black"), rect, width=2)
         color_name = font.render(f"{brightness}%", 1, "black")
         screen.blit(color_name, (20 + col * 190 + 70, 100 + row * 40 + 5))
-        b_rects[brightness] = pygame.Rect(20 + col * 190, 100 + row * 40, 180, 30)
+        button_map.register(
+            f"brightness.{brightness}",
+            pygame.Rect(20 + col * 190, 100 + row * 40, 180, 30),
+        )
         if brightness == state.brightness:
             color = "black" if brightness >= 50 else "white"
             checkmark = font_large.render("X", 1, color)
@@ -86,7 +103,7 @@ def redraw(
 
     pygame.display.flip()
 
-    return rects, b_rects, on_rect, off_rect
+    return button_map
 
 
 def main(client: GoveeClient) -> None:
@@ -100,7 +117,7 @@ def main(client: GoveeClient) -> None:
     clock = pygame.time.Clock()
     running = True
 
-    rects, b_rects, on_rect, off_rect = redraw(screen, state)
+    button_map = redraw(screen, state)
 
     while running:
         for event in pygame.event.get():
@@ -109,34 +126,27 @@ def main(client: GoveeClient) -> None:
                     running = False
                 case pygame.MOUSEBUTTONUP:
                     pos = event.pos
-                    if on_rect.collidepoint(pos):
-                        state.on = True
-                        client.on()
-                        redraw(screen, state)
-                        continue
-                    if off_rect.collidepoint(pos):
-                        state.on = False
-                        client.off()
-                        redraw(screen, state)
-                        continue
-                    found = False
-                    for name, rect in rects.items():
-                        if rect.collidepoint(pos):
-                            state.on = True
-                            state.color = name
-                            client.color(name)
-                            redraw(screen, state)
-                            found = True
-                            break
-                    if found:
-                        continue
-                    for brightness, rect in b_rects.items():
-                        if rect.collidepoint(pos):
-                            state.on = True
-                            state.brightness = brightness
-                            client.brightness(brightness)
-                            redraw(screen, state)
-                            break
+                    for name in button_map.collisions(pos):
+                        print(name)
+                        match name.split("."):
+                            case ["power", "on"]:
+                                state.on = True
+                                client.on()
+                                redraw(screen, state)
+                            case ["power", "off"]:
+                                state.on = False
+                                client.off()
+                                redraw(screen, state)
+                            case ["color", color]:
+                                state.on = True
+                                state.color = color
+                                client.color(color)
+                                redraw(screen, state)
+                            case ["brightness", brightness]:
+                                state.on = True
+                                state.brightness = int(brightness)
+                                client.brightness(int(brightness))
+                                redraw(screen, state)
 
         clock.tick(30)
 
