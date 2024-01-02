@@ -6,8 +6,8 @@ import time
 from enum import StrEnum
 from typing import Any
 
-from matplotlib.colors import CSS4_COLORS
-
+from govee_remote.color import get_color
+from govee_remote.color import RGB
 
 DEVICE_IP = "192.168.1.83"
 DEFAULT_PORT = 4003
@@ -36,7 +36,7 @@ class GoveeClient:
     def color(self, name: str) -> None:
         self.color_rgb(get_color(name))
 
-    def color_rgb(self, rgb: tuple[int, int, int]) -> None:
+    def color_rgb(self, rgb: RGB) -> None:
         if not all(0 <= x <= 255 for x in rgb):
             raise ValueError(f"Invalid color: {rgb}")
         data = {
@@ -78,12 +78,3 @@ class Command(StrEnum):
     ON_OFF = "turn"
     COLOR = "colorwc"
     BRIGHTNESS = "brightness"
-
-
-def get_color(name: str) -> tuple[int, int, int]:
-    name = name.lower()
-    if name not in CSS4_COLORS:
-        raise ValueError(f"Unknown color: {name}")
-    val = CSS4_COLORS[name]
-    r, g, b = (int(val[i : i + 2], 16) for i in range(1, 7, 2))
-    return r, g, b

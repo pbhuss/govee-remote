@@ -7,8 +7,9 @@ from matplotlib.colors import CSS4_COLORS
 from matplotlib.colors import rgb_to_hsv
 from matplotlib.colors import to_rgb
 
-from govee_remote.client import get_color
 from govee_remote.client import GoveeClient
+from govee_remote.color import get_color
+from govee_remote.color import get_luma
 
 
 @dataclass
@@ -29,11 +30,6 @@ class ButtonMap:
         for key, rect in self._map.items():
             if rect.collidepoint(pos):
                 yield key
-
-
-def get_luma(rgb: tuple[int, int, int]) -> float:
-    r, g, b = rgb
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
 def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
@@ -59,7 +55,7 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
     on_rect = pygame.Rect(left_padding, 30, large_button_width, large_button_height)
     button_map.register("power.on", on_rect)
     pygame.draw.rect(screen, get_color(on_color), on_rect)
-    pygame.draw.rect(screen, get_color("black"), on_rect, width=2)
+    pygame.draw.rect(screen, "black", on_rect, width=2)
     on_text = font_large.render("On", True, "black")
     screen.blit(on_text, on_text.get_rect(center=on_rect.center))
 
@@ -72,7 +68,7 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
     )
     button_map.register("power.off", off_rect)
     pygame.draw.rect(screen, get_color(off_color), off_rect)
-    pygame.draw.rect(screen, get_color("black"), off_rect, width=2)
+    pygame.draw.rect(screen, "black", off_rect, width=2)
     off_text = font_large.render("Off", True, "black")
     screen.blit(off_text, off_text.get_rect(center=off_rect.center))
 
@@ -85,14 +81,11 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
                 button_height,
             )
             pygame.draw.rect(screen, get_color(name), rect)
-            pygame.draw.rect(screen, get_color("black"), rect, width=2)
+            pygame.draw.rect(screen, "black", rect, width=2)
             color_name = font.render(name.capitalize(), 1, "black")
             screen.blit(
                 color_name,
-                (
-                    left_padding + col * cell_width + 70,
-                    top_padding + row * cell_height + 5,
-                ),
+                color_name.get_rect(left=rect.right + 10, centery=rect.centery),
             )
             button_map.register(
                 f"color.{name}",
@@ -112,7 +105,8 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
 
     brightness_label = font_large.render("Brightness", 1, "black")
     screen.blit(
-        brightness_label, (left_padding + col * cell_width, top_padding + row * 40 + 5)
+        brightness_label,
+        (left_padding + col * cell_width, top_padding + row * cell_height + 5),
     )
 
     brightnesses = [1, *range(10, 101, 10)]
@@ -127,11 +121,11 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
         pygame.draw.rect(
             screen, tuple(int(255 * brightness / 100) for _ in range(3)), rect
         )
-        pygame.draw.rect(screen, get_color("black"), rect, width=2)
-        color_name = font.render(f"{brightness}%", 1, "black")
+        pygame.draw.rect(screen, "black", rect, width=2)
+        brightness_name = font.render(f"{brightness}%", 1, "black")
         screen.blit(
-            color_name,
-            (left_padding + col * cell_width + 70, top_padding + row * cell_height + 5),
+            brightness_name,
+            brightness_name.get_rect(left=rect.right + 10, centery=rect.centery),
         )
         button_map.register(
             f"brightness.{brightness}",
@@ -165,33 +159,39 @@ def main(client: GoveeClient) -> None:
 
     button_map = redraw(screen, state)
 
+    hits = set()
+
     while running:
         for event in pygame.event.get():
             match event.type:
                 case pygame.QUIT:
                     running = False
+                case pygame.MOUSEBUTTONDOWN:
+                    pos = event.pos
+                    hits = set(button_map.collisions(pos))
                 case pygame.MOUSEBUTTONUP:
                     pos = event.pos
                     for name in button_map.collisions(pos):
-                        match name.split("."):
-                            case ["power", "on"]:
-                                state.on = True
-                                client.on()
-                                redraw(screen, state)
-                            case ["power", "off"]:
-                                state.on = False
-                                client.off()
-                                redraw(screen, state)
-                            case ["color", color]:
-                                state.on = True
-                                state.color = color
-                                client.color(color)
-                                redraw(screen, state)
-                            case ["brightness", brightness]:
-                                state.on = True
-                                state.brightness = int(brightness)
-                                client.brightness(int(brightness))
-                                redraw(screen, state)
+                        if name in hits:
+                            match name.split("."):
+                                case ["power", "on"]:
+                                    state.on = True
+                                    client.on()
+                                    redraw(screen, state)
+                                case ["power", "off"]:
+                                    state.on = False
+                                    client.off()
+                                    redraw(screen, state)
+                                case ["color", color]:
+                                    state.on = True
+                                    state.color = color
+                                    client.color(color)
+                                    redraw(screen, state)
+                                case ["brightness", brightness]:
+                                    state.on = True
+                                    state.brightness = int(brightness)
+                                    client.brightness(int(brightness))
+                                    redraw(screen, state)
 
         clock.tick(30)
 
