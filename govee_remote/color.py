@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import yaml
 from matplotlib.colors import CSS4_COLORS
 
 
@@ -18,3 +19,7 @@ def get_color(name: str) -> RGB:
 def get_luma(rgb: RGB) -> float:
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+with open("data/kelvin_rgb.yaml") as fp:
+    KELVIN_RGB = yaml.safe_load(fp)

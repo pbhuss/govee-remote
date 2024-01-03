@@ -10,13 +10,15 @@ from matplotlib.colors import to_rgb
 from govee_remote.client import GoveeClient
 from govee_remote.color import get_color
 from govee_remote.color import get_luma
+from govee_remote.color import KELVIN_RGB
 
 
 @dataclass
 class State:
-    color: str = "white"
+    color: str = "kelvin"
     brightness: int = 100
     on: bool = True
+    kelvin: int = 3000
 
 
 class ButtonMap:
@@ -37,7 +39,10 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
 
     screen.fill("white")
 
-    names = sorted(CSS4_COLORS, key=lambda c: tuple(rgb_to_hsv(to_rgb(c))))
+    names = sorted(
+        filter(lambda c: "grey" not in c, CSS4_COLORS),
+        key=lambda c: tuple(rgb_to_hsv(to_rgb(c))),
+    )
 
     font = pygame.font.SysFont("Arial", 14)
     font_large = pygame.font.SysFont("Arial", 22, bold=1)
@@ -141,6 +146,72 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
             checkmark = font_large.render("X", 1, color)
             screen.blit(checkmark, checkmark.get_rect(center=rect.center))
 
+    row += 1
+
+    kelvin_label = font_large.render("Illumination Mode", 1, "black")
+    screen.blit(
+        kelvin_label,
+        (left_padding + col * cell_width, top_padding + row * cell_height + 5),
+    )
+
+    row += 1
+
+    rect = pygame.Rect(
+        left_padding + col * cell_width,
+        top_padding + row * cell_height,
+        button_width,
+        button_height,
+    )
+    pygame.draw.rect(screen, KELVIN_RGB[state.kelvin], rect)
+    pygame.draw.rect(screen, "black", rect, width=2)
+    brightness_name = font.render(f"{state.kelvin}K", 1, "black")
+    screen.blit(
+        brightness_name,
+        brightness_name.get_rect(left=rect.right + 10, centery=rect.centery),
+    )
+    button_map.register(
+        "color.kelvin",
+        pygame.Rect(
+            left_padding + col * cell_width,
+            top_padding + row * cell_height,
+            cell_width - 30,
+            button_height,
+        ),
+    )
+    if state.color == "kelvin":
+        checkmark = font_large.render("X", 1, "black")
+        screen.blit(checkmark, checkmark.get_rect(center=rect.center))
+
+    kelvin_plus = pygame.Rect(
+        rect.right + 100,
+        top_padding + row * cell_height,
+        button_height,
+        button_height,
+    )
+    pygame.draw.rect(screen, "lightblue", kelvin_plus)
+    pygame.draw.rect(screen, "black", kelvin_plus, width=2)
+    plus_text = font.render("+", 1, "black")
+    screen.blit(
+        plus_text,
+        plus_text.get_rect(center=kelvin_plus.center),
+    )
+    button_map.register("kelvin.plus", kelvin_plus)
+
+    kelvin_minus = pygame.Rect(
+        kelvin_plus.right + 10,
+        top_padding + row * cell_height,
+        button_height,
+        button_height,
+    )
+    pygame.draw.rect(screen, "red", kelvin_minus)
+    pygame.draw.rect(screen, "black", kelvin_minus, width=2)
+    minus_text = font.render("-", 1, "black")
+    screen.blit(
+        minus_text,
+        minus_text.get_rect(center=kelvin_minus.center),
+    )
+    button_map.register("kelvin.minus", kelvin_minus)
+
     pygame.display.flip()
 
     return button_map
@@ -151,7 +222,10 @@ def main(client: GoveeClient) -> None:
     pygame.display.set_caption("Govee Control Panel")
     client.on()
     state = State()
-    client.color(state.color)
+    if state.color == "kelvin":
+        client.color_kelvin(state.kelvin)
+    else:
+        client.color(state.color)
     client.brightness(state.brightness)
     screen = pygame.display.set_mode((1600, 900))
     clock = pygame.time.Clock()
@@ -182,6 +256,11 @@ def main(client: GoveeClient) -> None:
                                     state.on = False
                                     client.off()
                                     redraw(screen, state)
+                                case ["color", "kelvin"]:
+                                    state.on = True
+                                    state.color = "kelvin"
+                                    client.color_kelvin(state.kelvin)
+                                    redraw(screen, state)
                                 case ["color", color]:
                                     state.on = True
                                     state.color = color
@@ -191,6 +270,16 @@ def main(client: GoveeClient) -> None:
                                     state.on = True
                                     state.brightness = int(brightness)
                                     client.brightness(int(brightness))
+                                    redraw(screen, state)
+                                case ["kelvin", "plus"]:
+                                    state.kelvin = min(state.kelvin + 100, 9000)
+                                    if state.color == "kelvin":
+                                        client.color_kelvin(state.kelvin)
+                                    redraw(screen, state)
+                                case ["kelvin", "minus"]:
+                                    state.kelvin = max(state.kelvin - 100, 2000)
+                                    if state.color == "kelvin":
+                                        client.color_kelvin(state.kelvin)
                                     redraw(screen, state)
 
         clock.tick(30)
