@@ -9,14 +9,13 @@ from typing import Any
 from govee_remote.color import get_color
 from govee_remote.color import RGB
 
-DEVICE_IP = "192.168.50.82"
 DEFAULT_PORT = 4003
 
 
 class GoveeClient:
     def __init__(
         self,
-        device_ip: str = DEVICE_IP,
+        device_ip: str,
         port: int = DEFAULT_PORT,
         verbose: bool = False,
     ) -> None:

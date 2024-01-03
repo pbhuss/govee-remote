@@ -4,6 +4,8 @@ version = "0.1.0"
 description = ""
 authors = ["Peter Huss <pbhuss@users.noreply.github.com>"]
 readme = "README.md"
+packages = [{include = "govee_remote"}]
+include = ["data/**"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -11,6 +13,8 @@ matplotlib = "^3.8.2"
 pygame = "^2.5.2"
 pyyaml = "^6.0.1"
 
+[tool.poetry.scripts]
+remote = 'govee_remote:start'
 
 [build-system]
 requires = ["poetry-core"]

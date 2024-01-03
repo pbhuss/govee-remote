@@ -219,7 +219,7 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
 
 def main(client: GoveeClient) -> None:
     pygame.init()
-    pygame.display.set_caption("Govee Control Panel")
+    pygame.display.set_caption("Govee Remote")
     client.on()
     state = State()
     if state.color == "kelvin":
