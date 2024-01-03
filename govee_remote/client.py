@@ -9,7 +9,7 @@ from typing import Any
 from govee_remote.color import get_color
 from govee_remote.color import RGB
 
-DEVICE_IP = "192.168.1.83"
+DEVICE_IP = "192.168.50.82"
 DEFAULT_PORT = 4003
 
 
