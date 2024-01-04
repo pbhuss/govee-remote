@@ -1,8 +1,13 @@
+from __future__ import annotations
+
+import os.path
 from collections.abc import Iterator
+from dataclasses import asdict
 from dataclasses import dataclass
 from itertools import batched
 
 import pygame
+import yaml
 from matplotlib.colors import CSS4_COLORS
 from matplotlib.colors import rgb_to_hsv
 from matplotlib.colors import to_rgb
@@ -13,12 +18,30 @@ from govee_remote.color import get_luma
 from govee_remote.color import KELVIN_RGB
 
 
+STATE_FILE = "data/state.yaml"
+
+
 @dataclass
 class State:
     color: str = "kelvin"
     brightness: int = 100
     on: bool = True
     kelvin: int = 3000
+
+    def save(self) -> None:
+        with open(STATE_FILE, "w") as fp:
+            yaml.safe_dump({"state": asdict(self)}, fp)
+
+    @classmethod
+    def load(cls) -> State:
+        if not os.path.exists(STATE_FILE):
+            return cls.default_state()
+        with open(STATE_FILE) as fp:
+            return State(**yaml.safe_load(fp)["state"])
+
+    @classmethod
+    def default_state(cls) -> State:
+        return cls(color="kelvin", brightness=100, on=True, kelvin=3000)
 
 
 class ButtonMap:
@@ -217,11 +240,50 @@ def redraw(screen: pygame.Surface, state: State) -> ButtonMap:
     return button_map
 
 
+def handle_click(
+    name: str, state: State, client: GoveeClient, screen: pygame.Surface
+) -> None:
+    match name.split("."):
+        case ["power", "on"]:
+            state.on = True
+            client.on()
+            redraw(screen, state)
+        case ["power", "off"]:
+            state.on = False
+            client.off()
+            redraw(screen, state)
+        case ["color", "kelvin"]:
+            state.on = True
+            state.color = "kelvin"
+            client.color_kelvin(state.kelvin)
+            redraw(screen, state)
+        case ["color", color]:
+            state.on = True
+            state.color = color
+            client.color(color)
+            redraw(screen, state)
+        case ["brightness", brightness]:
+            state.on = True
+            state.brightness = int(brightness)
+            client.brightness(int(brightness))
+            redraw(screen, state)
+        case ["kelvin", "plus"]:
+            state.kelvin = min(state.kelvin + 100, 9000)
+            if state.color == "kelvin":
+                client.color_kelvin(state.kelvin)
+            redraw(screen, state)
+        case ["kelvin", "minus"]:
+            state.kelvin = max(state.kelvin - 100, 2000)
+            if state.color == "kelvin":
+                client.color_kelvin(state.kelvin)
+            redraw(screen, state)
+
+
 def main(client: GoveeClient) -> None:
     pygame.init()
     pygame.display.set_caption("Govee Remote")
     client.on()
-    state = State()
+    state = State.load()
     if state.color == "kelvin":
         client.color_kelvin(state.kelvin)
     else:
@@ -230,11 +292,8 @@ def main(client: GoveeClient) -> None:
     screen = pygame.display.set_mode((1600, 900))
     clock = pygame.time.Clock()
     running = True
-
     button_map = redraw(screen, state)
-
     hits = set()
-
     while running:
         for event in pygame.event.get():
             match event.type:
@@ -247,42 +306,10 @@ def main(client: GoveeClient) -> None:
                     pos = event.pos
                     for name in button_map.collisions(pos):
                         if name in hits:
-                            match name.split("."):
-                                case ["power", "on"]:
-                                    state.on = True
-                                    client.on()
-                                    redraw(screen, state)
-                                case ["power", "off"]:
-                                    state.on = False
-                                    client.off()
-                                    redraw(screen, state)
-                                case ["color", "kelvin"]:
-                                    state.on = True
-                                    state.color = "kelvin"
-                                    client.color_kelvin(state.kelvin)
-                                    redraw(screen, state)
-                                case ["color", color]:
-                                    state.on = True
-                                    state.color = color
-                                    client.color(color)
-                                    redraw(screen, state)
-                                case ["brightness", brightness]:
-                                    state.on = True
-                                    state.brightness = int(brightness)
-                                    client.brightness(int(brightness))
-                                    redraw(screen, state)
-                                case ["kelvin", "plus"]:
-                                    state.kelvin = min(state.kelvin + 100, 9000)
-                                    if state.color == "kelvin":
-                                        client.color_kelvin(state.kelvin)
-                                    redraw(screen, state)
-                                case ["kelvin", "minus"]:
-                                    state.kelvin = max(state.kelvin - 100, 2000)
-                                    if state.color == "kelvin":
-                                        client.color_kelvin(state.kelvin)
-                                    redraw(screen, state)
-
+                            handle_click(
+                                name=name, state=state, client=client, screen=screen
+                            )
         clock.tick(30)
-
+    state.save()
     client.off()
     pygame.quit()
