@@ -18,7 +18,6 @@ from govee_remote.color import get_luma
 from govee_remote.color import KELVIN_RGB
 from govee_remote.color import RGB
 
-
 STATE_FILE = "data/state.yaml"
 
 
