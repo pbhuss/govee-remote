@@ -3,7 +3,6 @@ from __future__ import annotations
 import yaml
 from matplotlib.colors import CSS4_COLORS
 
-
 RGB = tuple[int, int, int]
 
 
